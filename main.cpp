@@ -1,11 +1,14 @@
 #include <iostream>
-#include <math.h>
 #include <arm_neon.h>
 #ifndef __ARM_NEON
 #error // activate neon
 #endif
 
 const uint64_t initState = 0x12345678;
+
+typedef unsigned char uchar;
+typedef unsigned short ushort;
+//typedef unsigned int uint;
 
 class RNG
 {
@@ -38,7 +41,7 @@ const char* reduce_str[] =
 	"reduce_max",
 	"reduce_min",
 	"reduce_add",
-}
+};
 
 template <typename T>
 void fillBuffer(RNG& rng, T* buffer)
@@ -60,17 +63,7 @@ void dumpArray(const T *array)
 	}
 }
 
-
-
-short pairwise_max(const short* ptr)
-{
-	int16x8_t a = vld1q_s16(ptr);
-	int16x4_t b = vpmax_s16(vget_low_s16(a), vget_high_s16(a));
-	b = vpmax_s16(b, b);
-	return (short)vget_lane_s16(vpmax_s16(b, b), 0);
-}
-
-NEON_REDUCE_OP(_Tpvec, _Tpnvec, scalartype, func, suffix) \
+#define NEON_REDUCE_OP(_Tpvec, _Tpnvec, scalartype, func, suffix) \
 inline scalartype pairwise_##func(const scalartype* ptr) \
 { \
 	_Tpvec##_t a = vld1q_##suffix(ptr); \
@@ -88,21 +81,97 @@ NEON_REDUCE_OP(int32x4, int32x2, int, add, s32)
 NEON_REDUCE_OP(int16x8, int16x4, short, max, s16)
 NEON_REDUCE_OP(int16x8, int16x4, short, min, s16)
 NEON_REDUCE_OP(int16x8, int16x4, short, add, s16)
-NEON_REDUCE_OP(int8x16, int8x8, char, max, s8)
-NEON_REDUCE_OP(int8x16, int8x8, char, min, s8)
-NEON_REDUCE_OP(int8x16, int8x8, char, add, s8)
-NEON_REDUCE_OP(uint32x4, uint32x2, unsigned int, max, u32)
-NEON_REDUCE_OP(uint32x4, uint32x2, unsigned int, min, u32)
-NEON_REDUCE_OP(uint32x4, uint32x2, unsigned int, add, u32)
-NEON_REDUCE_OP(uint16x8, uint16x4, unsigned short, max, u16)
-NEON_REDUCE_OP(uint16x8, uint16x4, unsigned short, min, u16)
-NEON_REDUCE_OP(uint16x8, uint16x4, unsigned short, add, u16)
-NEON_REDUCE_OP(uint8x16, uint8x8, unsigned char, max, u8)
-NEON_REDUCE_OP(uint8x16, uint8x8, unsigned char, min, u8)
-NEON_REDUCE_OP(uint8x16, uint8x8, unsigned char, add, u8)
+//NEON_REDUCE_OP(int8x16, int8x8, char, max, s8)
+//NEON_REDUCE_OP(int8x16, int8x8, char, min, s8)
+//NEON_REDUCE_OP(int8x16, int8x8, char, add, s8)
+NEON_REDUCE_OP(uint32x4, uint32x2, unsigned, max, u32)
+NEON_REDUCE_OP(uint32x4, uint32x2, unsigned, min, u32)
+NEON_REDUCE_OP(uint32x4, uint32x2, unsigned, add, u32)
+NEON_REDUCE_OP(uint16x8, uint16x4, ushort, max, u16)
+NEON_REDUCE_OP(uint16x8, uint16x4, ushort, min, u16)
+NEON_REDUCE_OP(uint16x8, uint16x4, ushort, add, u16)
+//NEON_REDUCE_OP(uint8x16, uint8x8, uchar, max, u8)
+//NEON_REDUCE_OP(uint8x16, uint8x8, uchar, min, u8)
+//NEON_REDUCE_OP(uint8x16, uint8x8, uchar, add, u8)
+
+#define NORMAL_REDUCE_OP_4(scalartype, func) \
+inline scalartype normal_##func(const scalartype* ptr) \
+{ \
+	scalartype a0 = std::func(ptr[0], ptr[1]); \
+	scalartype a1 = std::func(ptr[2], ptr[3]); \
+	return std::func(a0, a1);  \
+}
+#define NORMAL_REDUCE_OP_8(scalartype, func) \
+inline scalartype normal_##func(const scalartype* ptr) \
+{ \
+	scalartype a0 = std::func(ptr[0], ptr[1]); \
+	scalartype a1 = std::func(ptr[2], ptr[3]); \
+	scalartype a2 = std::func(ptr[4], ptr[5]); \
+	scalartype a3 = std::func(ptr[6], ptr[7]); \
+	a0 = std::func(a0, a1); \
+	a1 = std::func(a2, a3); \
+	return std::func(a0, a1);  \
+}
+#define NORMAL_REDUCE_OP_16(scalartype, func) \
+inline scalartype normal_##func(const scalartype* ptr) \
+{ \
+	scalartype a0 = std::func(ptr[0], ptr[1]); \
+	scalartype a1 = std::func(ptr[2], ptr[3]); \
+	scalartype a2 = std::func(ptr[4], ptr[5]); \
+	scalartype a3 = std::func(ptr[6], ptr[7]); \
+	scalartype a4 = std::func(ptr[8], ptr[9]); \
+	scalartype a5 = std::func(ptr[10], ptr[11]); \
+	scalartype a6 = std::func(ptr[12], ptr[13]); \
+	scalartype a7 = std::func(ptr[14], ptr[15]); \
+	a0 = std::func(a0, a1); \
+	a1 = std::func(a2, a3); \
+	a2 = std::func(a4, a5); \
+	a3 = std::func(a6, a7); \
+	a0 = std::func(a0, a1); \
+	a1 = std::func(a2, a3); \
+	return std::func(a0, a1);  \
+}
+#define NORMAL_REDUCE_ADD_4(scalartype) \
+inline scalartype normal_add(const scalartype* ptr) \
+{ \
+	return (scalartype)(ptr[0] + ptr[1] + ptr[2] + ptr[3]); \
+}
+#define NORMAL_REDUCE_ADD_8(scalartype) \
+inline scalartype normal_add(const scalartype* ptr) \
+{ \
+	return (scalartype)(ptr[0] + ptr[1] + ptr[2] + ptr[3] + ptr[4] + ptr[5] + ptr[6] + ptr[7]); \
+}
+#define NORMAL_REDUCE_ADD_16(scalartype) \
+inline scalartype normal_add(const scalartype* ptr) \
+{ \
+	return (scalartype)(ptr[0] + ptr[1] + ptr[2] + ptr[3] + ptr[4] + ptr[5] + ptr[6] + ptr[7] + \
+		ptr[8] + ptr[9] + ptr[10] + ptr[11] + ptr[12] + ptr[13] + ptr[14] + ptr[15]); \
+}
+
+NORMAL_REDUCE_OP_4(float, max)
+NORMAL_REDUCE_OP_4(float, min)
+NORMAL_REDUCE_OP_4(int, max)
+NORMAL_REDUCE_OP_4(int, min)
+NORMAL_REDUCE_OP_4(unsigned, max)
+NORMAL_REDUCE_OP_4(unsigned, min)
+NORMAL_REDUCE_OP_8(short, max)
+NORMAL_REDUCE_OP_8(short, min)
+NORMAL_REDUCE_OP_8(ushort, max)
+NORMAL_REDUCE_OP_8(ushort, min)
+NORMAL_REDUCE_OP_16(char, max)
+NORMAL_REDUCE_OP_16(char, min)
+NORMAL_REDUCE_OP_16(uchar, max)
+NORMAL_REDUCE_OP_16(uchar, min)
+
+NORMAL_REDUCE_ADD_4(int)
+NORMAL_REDUCE_ADD_4(unsigned)
+NORMAL_REDUCE_ADD_8(short)
+NORMAL_REDUCE_ADD_8(ushort)
+NORMAL_REDUCE_ADD_16(char)
+NORMAL_REDUCE_ADD_16(uchar)
 
 template <typename T>
-void testPairwise(RNG& rng, enum reduce_type, int cIteration = 100)
+void testPairwise(RNG& rng, enum reduce_type reduce, int cIteration = 100)
 {
 	const int cElement = 16/sizeof(T);
 	T buffer[cElement];
@@ -111,25 +180,25 @@ void testPairwise(RNG& rng, enum reduce_type, int cIteration = 100)
 	{
 		fillBuffer(rng, buffer);
 		T resultNeon, resultNormal;
-		switch(reduce_type)
+		switch(reduce)
 		{
 			case reduce_max:
-				resultNeon = pairwise_max(buffer);
-				resultNormal = normal_max(buffer);
+				resultNeon = pairwise_max((const T*)buffer);
+				resultNormal = normal_max((const T*)buffer);
 				break;
 			case reduce_min:
-				resultNeon = pairwise_min(buffer);
-				resultNormal = normal_min(buffer);
+				resultNeon = pairwise_min((const T*)buffer);
+				resultNormal = normal_min((const T*)buffer);
 				break;
 			case reduce_add:
-				resultNeon = pairwise_add(buffer);
-				resultNormal = normal_add(buffer);
+				resultNeon = pairwise_add((const T*)buffer);
+				resultNormal = normal_add((const T*)buffer);
 				break;
 
 		}
-		if(resultNormal != resultNeon)
+//		if(resultNormal != resultNeon)
 		{
-			std::cout << "Mismatch type:" << reduce_str[reduce_type] << std::endl;
+			std::cout << "Mismatch type:" << reduce_str[reduce] << std::endl;
 			dumpArray(buffer);
 			std::cout << std::endl;
 			std::cout << "result Neon  :" << resultNeon   << std::endl;
@@ -142,16 +211,11 @@ void testPairwise(RNG& rng, enum reduce_type, int cIteration = 100)
 int main(int argc, char** argv)
 {
 	RNG a(initState);
-	testPairwise<int>(a, reduce_max);
-	testPairwise<int>(a, reduce_min);
-	testPairwise<shrot>(a, reduce_add);
-	testPairwise<shrot>(a, reduce_max);
-	testPairwise<shrot>(a, reduce_min);
-	testPairwise<char>(a, reduce_add);
-	testPairwise<char>(a, reduce_max);
-	testPairwise<char>(a, reduce_min);
-	testPairwise<float>(a, reduce_add);
-	testPairwise<float>(a, reduce_max);
-	testPairwise<float>(a, reduce_min);
+	testPairwise<int>(a, reduce_max, 10);
+	testPairwise<int>(a, reduce_min, 10);
+	testPairwise<short>(a, reduce_max, 10);
+	testPairwise<short>(a, reduce_min, 10);
+	//testPairwise<char>(a, reduce_max);
+	//testPairwise<char>(a, reduce_min);
 	return 0;
 }
