@@ -182,17 +182,17 @@ template <> void testPairwise<unsigned short>(RNG& rng, enum reduce_type reduce,
 int main(int argc, char** argv)
 {
 	RNG a(initState);
-	//testPairwise<int>(a, reduce_max, 10);
-	//testPairwise<int>(a, reduce_min, 10);
+	testPairwise<int>(a, reduce_max, 10);
+	testPairwise<int>(a, reduce_min, 10);
 	testPairwise<int>(a, reduce_add, 10);
-	//testPairwise<unsigned int>(a, reduce_max, 10);
-	//testPairwise<unsigned int>(a, reduce_min, 10);
-	//testPairwise<unsigned int>(a, reduce_add, 10);
-	//testPairwise<short>(a, reduce_max, 10);
-	//testPairwise<short>(a, reduce_min, 10);
-	//testPairwise<short>(a, reduce_add, 10);
-	//testPairwise<unsigned short>(a, reduce_max, 10);
-	//testPairwise<unsigned short>(a, reduce_min, 10);
-	//testPairwise<unsigned short>(a, reduce_add, 10);
+	testPairwise<unsigned int>(a, reduce_max, 10);
+	testPairwise<unsigned int>(a, reduce_min, 10);
+	testPairwise<unsigned int>(a, reduce_add, 10);
+	testPairwise<short>(a, reduce_max, 10);
+	testPairwise<short>(a, reduce_min, 10);
+	testPairwise<short>(a, reduce_add, 10);
+	testPairwise<unsigned short>(a, reduce_max, 10);
+	testPairwise<unsigned short>(a, reduce_min, 10);
+	testPairwise<unsigned short>(a, reduce_add, 10);
 	return 0;
 }
