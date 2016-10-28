@@ -1,20 +1,33 @@
-#include <iostream>
-#include <arm_neon.h>
-#ifndef __ARM_NEON
-#error // activate neon
+
+#if defined _MSC_VER || defined __BORLANDC__
+   typedef __int64 int64;
+   typedef unsigned __int64 uint64;
+#  define CV_BIG_INT(n)   n##I64
+#  define CV_BIG_UINT(n)  n##UI64
+#else
+   typedef int64_t int64;
+   typedef uint64_t uint64;
+#  define CV_BIG_INT(n)   n##LL
+#  define CV_BIG_UINT(n)  n##ULL
 #endif
 
-const uint64_t initState = 0x12345678;
+#include <iostream>
+#if defined(__ARM_NEON__) || (defined (__ARM_NEON) && defined(__aarch64__))
+#influde "simd_neon.h"
+#elif defined __SSE2__ || defined _M_X64 || (defined _M_IX86_FP && _M_IX86_FP >= 2)
+#include "simd_sse.h"
+#endif
 
+const uint64 initState = 0x12345678;
 typedef unsigned char uchar;
 typedef unsigned short ushort;
 
 class RNG
 {
 public:
-	uint64_t state;
+	uint64 state;
 	RNG()                        { state = 0xffffffff; };
-	RNG(uint64_t _state)         { state = _state ? _state : 0xffffffff; };
+	RNG(uint64 _state)           { state = _state ? _state : 0xffffffff; };
 	operator unsigned char()     { return (unsigned char)next(); };
 	operator char()              { return (char)next(); };
 	operator unsigned short()    { return (unsigned short)next(); };
@@ -24,7 +37,7 @@ public:
 
 	inline unsigned next()
 	{
-	    state = (uint64_t)(unsigned)state* /*CV_RNG_COEFF*/ 4164903690U + (unsigned)(state >> 32);
+	    state = (uint64)(unsigned)state* /*CV_RNG_COEFF*/ 4164903690U + (unsigned)(state >> 32);
 	    return (unsigned)state;
 	}
 };	
@@ -61,31 +74,6 @@ void dumpArray(const T *array)
 		std::cout << '\t' << array[i];
 	}
 }
-
-#define NEON_REDUCE_OP(_Tpvec, _Tpnvec, scalartype, func, suffix) \
-inline scalartype pairwise_##func(const scalartype* ptr) \
-{ \
-	_Tpvec##_t a = vld1q_##suffix(ptr); \
-	_Tpnvec##_t b = vp##func##_##suffix(vget_low_##suffix(a), vget_high_##suffix(a)); \
-	b = vp##func##_##suffix(b, b); \
-	return (scalartype)vget_lane_##suffix(vp##func##_##suffix(b, b), 0); \
-}
-
-NEON_REDUCE_OP(float32x4, float32x2, float, max, f32)
-NEON_REDUCE_OP(float32x4, float32x2, float, min, f32)
-NEON_REDUCE_OP(float32x4, float32x2, float, add, f32)
-NEON_REDUCE_OP(int32x4, int32x2, int, max, s32)
-NEON_REDUCE_OP(int32x4, int32x2, int, min, s32)
-NEON_REDUCE_OP(int32x4, int32x2, int, add, s32)
-NEON_REDUCE_OP(int16x8, int16x4, short, max, s16)
-NEON_REDUCE_OP(int16x8, int16x4, short, min, s16)
-NEON_REDUCE_OP(int16x8, int16x4, short, add, s16)
-NEON_REDUCE_OP(uint32x4, uint32x2, unsigned, max, u32)
-NEON_REDUCE_OP(uint32x4, uint32x2, unsigned, min, u32)
-NEON_REDUCE_OP(uint32x4, uint32x2, unsigned, add, u32)
-NEON_REDUCE_OP(uint16x8, uint16x4, ushort, max, u16)
-NEON_REDUCE_OP(uint16x8, uint16x4, ushort, min, u16)
-NEON_REDUCE_OP(uint16x8, uint16x4, ushort, add, u16)
 
 #define NORMAL_REDUCE_OP_4(scalartype, func) \
 inline scalartype normal_##func(const scalartype* ptr) \
@@ -130,8 +118,8 @@ NORMAL_REDUCE_ADD_4(unsigned)
 NORMAL_REDUCE_ADD_8(short)
 NORMAL_REDUCE_ADD_8(ushort)
 
-template <typename T>
-void testPairwise(RNG& rng, enum reduce_type reduce, int cIteration = 100)
+template <typename T, int mask>
+void testPairwise(RNG& rng, enum reduce_type reduce, int cIteration)
 {
 	const int cElement = 16/sizeof(T);
 	T buffer[cElement];
@@ -151,6 +139,10 @@ void testPairwise(RNG& rng, enum reduce_type reduce, int cIteration = 100)
 				resultNormal = normal_min((const T*)buffer);
 				break;
 			case reduce_add:
+                for(int j = 0;j < cElement;j++)
+                {
+                    buffer[j] &= mask;
+                }
 				resultNeon = pairwise_add((const T*)buffer);
 				resultNormal = normal_add((const T*)buffer);
 				break;
@@ -161,19 +153,46 @@ void testPairwise(RNG& rng, enum reduce_type reduce, int cIteration = 100)
 			std::cout << "Mismatch type:" << reduce_str[reduce] << std::endl;
 			dumpArray(buffer);
 			std::cout << std::endl;
-			std::cout << "result Neon  :" << resultNeon   << std::endl;
+			std::cout << "result SIMD  :" << resultNeon   << std::endl;
 			std::cout << "result Normal:" << resultNormal << std::endl;
 		}
 	}
 }
 
+template <typename T>
+void testPairwise(RNG& rng, enum reduce_type reduce, int cIteration = 100);
+
+template <> void testPairwise<int>(RNG& rng, enum reduce_type reduce, int cIteration)
+{
+    testPairwise<int, 0x1fffffff>(rng, reduce, cIteration);
+}
+template <> void testPairwise<unsigned>(RNG& rng, enum reduce_type reduce, int cIteration)
+{
+    testPairwise<unsigned, 0x1fffffff>(rng, reduce, cIteration);
+}
+template <> void testPairwise<short>(RNG& rng, enum reduce_type reduce, int cIteration)
+{
+    testPairwise<short, 0xfff>(rng, reduce, cIteration);
+}
+template <> void testPairwise<unsigned short>(RNG& rng, enum reduce_type reduce, int cIteration)
+{
+    testPairwise<unsigned short, 0xfff>(rng, reduce, cIteration);
+}
 
 int main(int argc, char** argv)
 {
 	RNG a(initState);
 	testPairwise<int>(a, reduce_max, 10);
 	testPairwise<int>(a, reduce_min, 10);
+	testPairwise<int>(a, reduce_add, 10);
+	testPairwise<unsigned int>(a, reduce_max, 10);
+	testPairwise<unsigned int>(a, reduce_min, 10);
+	testPairwise<unsigned int>(a, reduce_add, 10);
 	testPairwise<short>(a, reduce_max, 10);
 	testPairwise<short>(a, reduce_min, 10);
+	testPairwise<short>(a, reduce_add, 10);
+	testPairwise<unsigned short>(a, reduce_max, 10);
+	testPairwise<unsigned short>(a, reduce_min, 10);
+	testPairwise<unsigned short>(a, reduce_add, 10);
 	return 0;
 }
