@@ -1,4 +1,5 @@
-
+#include <iostream>
+#include <stdint.h>
 #if defined _MSC_VER || defined __BORLANDC__
    typedef __int64 int64;
    typedef unsigned __int64 uint64;
@@ -11,16 +12,15 @@
 #  define CV_BIG_UINT(n)  n##ULL
 #endif
 
-#include <iostream>
-#if defined(__ARM_NEON__) || (defined (__ARM_NEON) && defined(__aarch64__))
-#influde "simd_neon.h"
-#elif defined __SSE2__ || defined _M_X64 || (defined _M_IX86_FP && _M_IX86_FP >= 2)
-#include "simd_sse.h"
-#endif
-
 const uint64 initState = 0x12345678;
 typedef unsigned char uchar;
 typedef unsigned short ushort;
+
+#if defined(__ARM_NEON__) || (defined (__ARM_NEON) && defined(__aarch64__))
+#include "simd_neon.h"
+#elif defined __SSE2__ || defined _M_X64 || (defined _M_IX86_FP && _M_IX86_FP >= 2)
+#include "simd_sse.h"
+#endif
 
 class RNG
 {
@@ -127,15 +127,15 @@ void testPairwise(RNG& rng, enum reduce_type reduce, int cIteration)
 	for(int i = 0;i < cIteration;i++)
 	{
 		fillBuffer(rng, buffer);
-		T resultNeon, resultNormal;
+		T resultSimd, resultNormal;
 		switch(reduce)
 		{
 			case reduce_max:
-				resultNeon = pairwise_max((const T*)buffer);
+				resultSimd = pairwise_max((const T*)buffer);
 				resultNormal = normal_max((const T*)buffer);
 				break;
 			case reduce_min:
-				resultNeon = pairwise_min((const T*)buffer);
+				resultSimd = pairwise_min((const T*)buffer);
 				resultNormal = normal_min((const T*)buffer);
 				break;
 			case reduce_add:
@@ -143,17 +143,17 @@ void testPairwise(RNG& rng, enum reduce_type reduce, int cIteration)
                 {
                     buffer[j] &= mask;
                 }
-				resultNeon = pairwise_add((const T*)buffer);
+				resultSimd = pairwise_add((const T*)buffer);
 				resultNormal = normal_add((const T*)buffer);
 				break;
 
 		}
-		if(resultNormal != resultNeon)
+		if(resultNormal != resultSimd)
 		{
 			std::cout << "Mismatch type:" << reduce_str[reduce] << std::endl;
 			dumpArray(buffer);
 			std::cout << std::endl;
-			std::cout << "result SIMD  :" << resultNeon   << std::endl;
+			std::cout << "result SIMD  :" << resultSimd   << std::endl;
 			std::cout << "result Normal:" << resultNormal << std::endl;
 		}
 	}
@@ -182,17 +182,17 @@ template <> void testPairwise<unsigned short>(RNG& rng, enum reduce_type reduce,
 int main(int argc, char** argv)
 {
 	RNG a(initState);
-	testPairwise<int>(a, reduce_max, 10);
-	testPairwise<int>(a, reduce_min, 10);
+	//testPairwise<int>(a, reduce_max, 10);
+	//testPairwise<int>(a, reduce_min, 10);
 	testPairwise<int>(a, reduce_add, 10);
-	testPairwise<unsigned int>(a, reduce_max, 10);
-	testPairwise<unsigned int>(a, reduce_min, 10);
-	testPairwise<unsigned int>(a, reduce_add, 10);
-	testPairwise<short>(a, reduce_max, 10);
-	testPairwise<short>(a, reduce_min, 10);
-	testPairwise<short>(a, reduce_add, 10);
-	testPairwise<unsigned short>(a, reduce_max, 10);
-	testPairwise<unsigned short>(a, reduce_min, 10);
-	testPairwise<unsigned short>(a, reduce_add, 10);
+	//testPairwise<unsigned int>(a, reduce_max, 10);
+	//testPairwise<unsigned int>(a, reduce_min, 10);
+	//testPairwise<unsigned int>(a, reduce_add, 10);
+	//testPairwise<short>(a, reduce_max, 10);
+	//testPairwise<short>(a, reduce_min, 10);
+	//testPairwise<short>(a, reduce_add, 10);
+	//testPairwise<unsigned short>(a, reduce_max, 10);
+	//testPairwise<unsigned short>(a, reduce_min, 10);
+	//testPairwise<unsigned short>(a, reduce_add, 10);
 	return 0;
 }
